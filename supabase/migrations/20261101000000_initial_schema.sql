@@ -107,17 +107,28 @@ create table if not exists public.trades (
   created_at timestamptz not null default now()
 );
 
-do $$
-declare
-  tbl text;
-begin
-  foreach tbl in array array['profiles','income_entries','expense_entries','goals','tasks','projects','trades']
-  loop
-    execute format('alter table public.%I enable row level security', tbl);
-    execute format('drop policy if exists %I on public.%I', tbl || '_select_own', tbl);
-    execute format('create policy %I on public.%I for select to authenticated using (id = (select auth.uid()))', tbl || '_select_own', tbl);
-  end loop;
-end $$;
+alter table public.profiles enable row level security;
+alter table public.income_entries enable row level security;
+alter table public.expense_entries enable row level security;
+alter table public.goals enable row level security;
+alter table public.tasks enable row level security;
+alter table public.projects enable row level security;
+alter table public.trades enable row level security;
+
+drop policy if exists profiles_select_own on public.profiles;
+create policy profiles_select_own on public.profiles for select to authenticated using (id = (select auth.uid()));
+drop policy if exists income_entries_select_own on public.income_entries;
+create policy income_entries_select_own on public.income_entries for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists expense_entries_select_own on public.expense_entries;
+create policy expense_entries_select_own on public.expense_entries for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists goals_select_own on public.goals;
+create policy goals_select_own on public.goals for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists tasks_select_own on public.tasks;
+create policy tasks_select_own on public.tasks for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists projects_select_own on public.projects;
+create policy projects_select_own on public.projects for select to authenticated using (user_id = (select auth.uid()));
+drop policy if exists trades_select_own on public.trades;
+create policy trades_select_own on public.trades for select to authenticated using (user_id = (select auth.uid()));
 
 -- Profiles use id as the owner key; other tables use user_id.
 drop policy if exists profiles_insert_own on public.profiles;
