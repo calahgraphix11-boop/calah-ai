@@ -261,7 +261,7 @@ export default function Home() {
     setWorking(true);
     try {
       if (authMode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email: authEmail, password: authPassword, options: { data: { full_name: authName } } });
+        const { data, error } = await supabase.auth.signUp({ email: authEmail, password: authPassword, options: { data: { full_name: authName }, emailRedirectTo: "https://november-command-centre.vercel.app" } });
         if (error) throw error;
         if (data.session) setAuthNotice("Account created. Your private workspace is being prepared.");
         else setAuthNotice("Account created. Check your email to confirm the address, then sign in.");
