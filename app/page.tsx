@@ -170,7 +170,7 @@ export default function Home() {
         const paths = trade.screenshots || [];
         const urls = await Promise.all(paths.map(async path => {
           if (!supabase) return "";
-          const { data } = await supabase.storage.from("trade-journal").createSignedUrl(path, 3600);
+          const { data } = await supabase!.storage.from("trade-journal").createSignedUrl(path, 3600);
           return data?.signedUrl || "";
         }));
         return { ...trade, screenshotUrls: urls.filter(Boolean) };
