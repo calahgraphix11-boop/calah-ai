@@ -497,7 +497,7 @@ export default function Home() {
         <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open menu"><Menu size={17} /></button>
         <div><div className="eyebrow">November 2026 / Command Centre</div><h1 className="page-title">{title}</h1><div className="page-description">{description}</div></div>
       </div>
-      <div className="top-actions"><div className="date-pill"><CalendarDays size={12} style={{ display: "inline", marginRight: 6, verticalAlign: "middle" }} />{currentMonth()}</div><button className="icon-button" onClick={() => void loadWorkspace(user.id)} aria-label="Refresh"><RefreshCw size={15} /></button><button className="icon-button" onClick={() => setScreen("settings")} aria-label="Settings"><Settings2 size={15} /></button></div>
+      <div className="top-actions"><div className="date-pill"><CalendarDays size={12} style={{ display: "inline", marginRight: 6, verticalAlign: "middle" }} />{"November 2026"}</div><button className="icon-button" onClick={() => void loadWorkspace(user!.id)} aria-label="Refresh"><RefreshCw size={15} /></button><button className="icon-button" onClick={() => setScreen("settings")} aria-label="Settings"><Settings2 size={15} /></button></div>
     </div>;
   }
 
