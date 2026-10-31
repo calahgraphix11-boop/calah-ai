@@ -11,7 +11,7 @@ import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
   Tooltip, XAxis, YAxis
 } from "recharts";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState, type ElementType } from "react";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 
 type Screen = "overview" | "goals" | "income" | "finance" | "tasks" | "projects" | "trading" | "analytics" | "settings";
@@ -500,7 +500,7 @@ export default function Home() {
     </div>;
   }
 
-  function KPI({ label, value, note, icon: Icon, color = "gold", trend }: { label: string; value: string; note: string; icon: React.ElementType; color?: string; trend?: string }) {
+  function KPI({ label, value, note, icon: Icon, color = "gold", trend }: { label: string; value: string; note: string; icon: ElementType; color?: string; trend?: string }) {
     return <div className={"card kpi " + (color === "blue" ? "accent-blue" : color === "green" ? "accent-green" : color === "violet" ? "accent-violet" : color === "rose" ? "accent-rose" : "")}>
       <div className="kpi-top"><span>{label}</span><span className="kpi-icon"><Icon size={14} /></span></div>
       <div className="kpi-value">{value}</div><div className="kpi-foot"><span>{note}</span>{trend && <b style={{ color: trend.startsWith("-") ? "var(--red)" : "var(--green)" }}>{trend}</b>}</div>
