@@ -169,6 +169,7 @@ export default function Home() {
       const withUrls = await Promise.all(tradeRows.map(async trade => {
         const paths = trade.screenshots || [];
         const urls = await Promise.all(paths.map(async path => {
+          if (!supabase) return "";
           const { data } = await supabase.storage.from("trade-journal").createSignedUrl(path, 3600);
           return data?.signedUrl || "";
         }));
