@@ -209,3 +209,5 @@ tbody tr:last-child td { border-bottom: 0; }
   .topbar { gap: 8px; }
   .page-title { font-size: 24px; }
 }
+
+@keyframes loadingbar { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
