@@ -16,6 +16,9 @@ function safeEqual(a: string, b: string) {
 }
 
 export async function middleware(request: Request) {
+  // The root page contains the PIN form; it must remain reachable while locked.
+  if (new URL(request.url).pathname === "/") return NextResponse.next();
+
   const secret = process.env.WORKSPACE_SESSION_SECRET;
   const token = request.headers.get("cookie")?.split(";").map(x => x.trim()).find(x => x.startsWith(COOKIE_NAME + "="))?.slice(COOKIE_NAME.length + 1);
   if (secret && token) {
