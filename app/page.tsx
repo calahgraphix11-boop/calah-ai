@@ -12,7 +12,7 @@ import {
   Tooltip, XAxis, YAxis
 } from "recharts";
 import { FormEvent, useEffect, useMemo, useState, type ElementType } from "react";
-import { isSupabaseConfigured, supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 
 type Screen = "overview" | "goals" | "income" | "finance" | "tasks" | "projects" | "trading" | "analytics" | "settings";
 type Currency = "USD" | "XAF" | "EUR";
@@ -85,17 +85,7 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [booting, setBooting] = useState(true);
-  const [unlocked, setUnlocked] = useState(false);
-  const [accessPin, setAccessPin] = useState("");
-  const [pinError, setPinError] = useState("");
-  const [unlocking, setUnlocking] = useState(false);
   const [working, setWorking] = useState(false);
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const [authName, setAuthName] = useState("");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authError, setAuthError] = useState("");
-  const [authNotice, setAuthNotice] = useState("");
   const [dataError, setDataError] = useState("");
   const [toast, setToast] = useState<Toast | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -189,42 +179,23 @@ export default function Home() {
   }
 
   useEffect(() => {
-    if (!unlocked) return;
-    if (!supabase) { setBooting(false); return; }
     let alive = true;
-    const startPrivateWorkspace = async () => {
+    const startWorkspace = async () => {
       try {
-        const { data: sessionData } = await supabase!.auth.getSession();
-        let activeUser = sessionData.session?.user ?? null;
-        if (!activeUser) {
-          const { data, error } = await supabase!.auth.signInAnonymously();
-          if (error) throw error;
-          activeUser = data.user;
-        }
-        if (!alive || !activeUser) return;
-        setUser({ id: activeUser.id, email: "Private single-user workspace" });
+        const { data } = await supabase!.auth.getSession();
+        const activeUser = data.session.user;
+        if (!alive) return;
+        setUser({ id: activeUser.id, email: "Saved on this device" });
         await loadWorkspace(activeUser.id);
       } catch (error) {
-        if (alive) setDataError(error instanceof Error ? error.message : "Could not open your private workspace.");
+        if (alive) setDataError(error instanceof Error ? error.message : "Could not open your workspace.");
       } finally {
         if (alive) setBooting(false);
       }
     };
-    void startPrivateWorkspace();
+    void startWorkspace();
     return () => { alive = false; };
-  }, [unlocked]);
-
-  async function unlockWorkspace(e: FormEvent) {
-    e.preventDefault();
-    if (accessPin.length !== 4 || unlocking) return;
-    setUnlocking(true); setPinError("");
-    try {
-      const response = await fetch("/api/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: accessPin }) });
-      if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Wait a little and try again." : "Incorrect PIN. Try again.");
-      setUnlocked(true); setAccessPin("");
-    } catch (error) { setPinError(error instanceof Error ? error.message : "Could not unlock the workspace."); }
-    finally { setUnlocking(false); }
-  }
+  }, []);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -277,7 +248,7 @@ export default function Home() {
 
 
   async function addIncome(e: FormEvent) {
-    e.preventDefault(); if (!supabase || !user || !incomeDraft.title.trim() || !incomeDraft.amount) return;
+    e.preventDefault(); if (!user || !incomeDraft.title.trim() || !incomeDraft.amount) return;
     setWorking(true);
     try {
       const amount = cleanNumber(incomeDraft.amount);
@@ -322,7 +293,7 @@ export default function Home() {
   }
 
   async function toggleTask(task: Task) {
-    if (!supabase || !user) return;
+    if (!user) return;
     const { error } = await supabase.from("tasks").update({ completed: !task.completed }).eq("id", task.id).eq("user_id", user.id);
     if (error) notify(error.message, "error"); else setTasks(prev => prev.map(x => x.id === task.id ? { ...x, completed: !x.completed } : x));
   }
@@ -436,10 +407,7 @@ export default function Home() {
     URL.revokeObjectURL(url); notify("Your data export has been prepared.");
   }
 
-  async function signOut() {
-    if (supabase) await supabase.auth.signOut();
-    setScreen("overview");
-  }
+  async function signOut() { setScreen("overview"); }
 
   const pageTitle: Record<Screen, [string, string]> = {
     overview: ["Your November, in focus", "A clear view of the actions and numbers moving you forward."],
@@ -453,38 +421,7 @@ export default function Home() {
     settings: ["Workspace settings", "Make the command centre fit your workflow."]
   };
 
-  if (!unlocked) return (
-    <div className="auth-shell">
-      <form className="auth-card" onSubmit={unlockWorkspace}>
-        <div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div>
-        <div style={{width:46,height:46,borderRadius:14,display:"grid",placeItems:"center",background:"rgba(244,198,78,.12)",border:"1px solid rgba(244,198,78,.2)",marginBottom:20}}><Lock size={20} color="var(--gold)"/></div>
-        <h1>Welcome back.</h1>
-        <p>Enter your 4-digit PIN to open your private workspace.</p>
-        <div className="field" style={{marginTop:22}}><label htmlFor="workspace-pin">Access PIN</label><input id="workspace-pin" type="password" inputMode="numeric" autoComplete="current-password" maxLength={4} pattern="[0-9]{4}" value={accessPin} onChange={e=>setAccessPin(e.target.value.replace(/\\D/g,"").slice(0,4))} placeholder="••••" autoFocus required /></div>
-        {pinError&&<div className="auth-error" style={{marginTop:12}}>{pinError}</div>}
-        <button className="primary-button" type="submit" disabled={unlocking||accessPin.length!==4} style={{width:"100%",justifyContent:"center",marginTop:16}}>{unlocking?"Checking…":"Unlock workspace"}</button>
-        <div className="tiny muted" style={{marginTop:18}}>Private access · Your records stay in Supabase</div>
-      </form>
-    </div>
-  );
-
-  if (booting) return <div className="auth-shell"><div className="auth-card"><div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div><p>Loading your private workspace…</p></div></div>;
-
-  if (!isSupabaseConfigured) return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div>
-        <h1>Your month. Under control.</h1>
-        <p>The dashboard code is ready, but the private database connection has not been added yet. Connect the Supabase project using the two public environment variables to enable sign-in and save your records.</p>
-        <div className="auth-success"><ShieldCheck size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} /> No financial or trading data is being saved until the private backend is connected.</div>
-        <div className="field"><label>Required setup</label><input readOnly value="NEXT_PUBLIC_SUPABASE_URL" /></div>
-        <div className="field" style={{ marginTop: 10 }}><input readOnly value="NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" /></div>
-        <p className="tiny" style={{ marginTop: 15 }}>Never use a service-role key in the browser. Sign-up and account creation will be enabled once Supabase Auth is connected.</p>
-      </div>
-    </div>
-  );
-
-  if (!user || !profile) return <div className="auth-shell"><div className="auth-card"><div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div><p>Preparing your private workspace…</p>{dataError && <div className="auth-error">{dataError}</div>}</div></div>;
+  if (booting || !user || !profile) return <div className="auth-shell"><div className="auth-card"><div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div><p>Opening your workspace…</p>{dataError && <div className="auth-error">{dataError}</div>}</div></div>;
 
   function Header() {
     const [title, description] = pageTitle[screen];
@@ -650,7 +587,7 @@ export default function Home() {
     return <>
       <div className="grid grid-4"><KPI label="Journaled trades" value={String(trades.length)} note="All recorded setups" icon={Activity} color="blue"/><KPI label="Win rate" value={closedTrades?winRate+"%":"—"} note={tradeWins+" wins · "+closedTrades+" closed"} icon={TrendingUp} color="green"/><KPI label="Realized P&L" value={money(trades.filter(x=>x.result!=="open").reduce((s,x)=>s+Number(x.pnl_usd),0))} note="From journaled closed trades" icon={CircleDollarSign} color="gold"/><KPI label="Open trades" value={String(trades.filter(x=>x.result==="open").length)} note="Awaiting outcome" icon={Clock3} color="violet"/></div>
       <div className="section-heading"><div><h2>Trade journal</h2><p>Capture the chart, your reasoning, risk and outcome. Every trade is a lesson.</p></div><button className="primary-button" onClick={()=>setShowTradeForm(!showTradeForm)}><Plus size={13}/> Journal a trade</button></div>
-      {showTradeForm && <div className="card panel"><div className="card-title-row"><div><h3 className="card-title">New journal entry</h3><div className="card-subtitle">Upload up to 10 MB each · JPG, PNG or WebP screenshots.</div></div><button className="icon-button" onClick={()=>setShowTradeForm(false)}><X size={15}/></button></div>
+      {showTradeForm && <div className="card panel"><div className="card-title-row"><div><h3 className="card-title">New journal entry</h3><div className="card-subtitle">Record the setup, risk and outcome.</div></div><button className="icon-button" onClick={()=>setShowTradeForm(false)}><X size={15}/></button></div>
         <form onSubmit={addTrade}><div className="form-grid">
           <div className="field"><label>Instrument / pair</label><input required value={tradeDraft.instrument} onChange={e=>setTradeDraft({...tradeDraft,instrument:e.target.value})}/></div>
           <div className="field"><label>Direction</label><select value={tradeDraft.direction} onChange={e=>setTradeDraft({...tradeDraft,direction:e.target.value as Trade["direction"]})}><option value="buy">Buy / Long</option><option value="sell">Sell / Short</option></select></div>
@@ -663,11 +600,11 @@ export default function Home() {
           <div className="field"><label>Entry price</label><input type="number" step="any" value={tradeDraft.entry_price} onChange={e=>setTradeDraft({...tradeDraft,entry_price:e.target.value})}/></div>
           <div className="field"><label>Exit price</label><input type="number" step="any" value={tradeDraft.exit_price} onChange={e=>setTradeDraft({...tradeDraft,exit_price:e.target.value})}/></div>
           <div className="field"><label>Opened at</label><input type="datetime-local" value={tradeDraft.opened_at} onChange={e=>setTradeDraft({...tradeDraft,opened_at:e.target.value})}/></div>
-          <div className="field"><label>Chart screenshots</label><input type="file" accept="image/png,image/jpeg,image/webp" multiple onChange={e=>setTradeFiles(Array.from(e.target.files||[]))}/><span className="tiny muted">{tradeFiles.length} file(s) selected</span></div>
+          
           <div className="field full"><label>Trade thesis, execution and lessons</label><textarea value={tradeDraft.notes} onChange={e=>setTradeDraft({...tradeDraft,notes:e.target.value})} placeholder="Why did you take this setup? What confirmed it? Did you follow your plan? What would you improve?"/></div>
         </div><div className="form-actions"><button type="button" className="secondary-button" onClick={()=>setShowTradeForm(false)}>Cancel</button><button className="primary-button" disabled={working}><Plus size={13}/> Save trade</button></div></form>
       </div>}
-      <div className="grid grid-2 panel">{recentTrades.length ? recentTrades.map(t=><div className="trade-card" key={t.id}><div className="trade-head"><div><div className="trade-symbol">{t.instrument}</div><div className="trade-details"><span>{t.direction.toUpperCase()}</span><span>·</span><span>{new Date(t.opened_at).toLocaleString()}</span></div></div><span className={"status "+(t.result==="win"?"green":t.result==="loss"?"red":t.result==="open"?"blue":"amber")}>{t.result}</span></div><div className="trade-details"><span>{t.setup || "No setup tagged"}</span>{t.risk_percent!==null&&<span>Risk {t.risk_percent}%</span>}{t.reward_risk!==null&&<span>R:R {t.reward_risk}</span>}</div><div style={{ font:"800 20px Manrope",color:Number(t.pnl_usd)>=0?"var(--green)":"var(--red)",margin:"6px 0" }}>{t.result==="open"?"Open":(Number(t.pnl_usd)>=0?"+":"")+money(t.pnl_usd)}</div>{t.notes&&<div className="trade-notes">{t.notes}</div>}{t.screenshotUrls?.length ? <div className="trade-images">{t.screenshotUrls.map((url,i)=><a href={url} target="_blank" rel="noreferrer" key={i}><img src={url} alt={"Trade screenshot "+(i+1)}/></a>)}</div>:null}<div style={{ display:"flex",justifyContent:"flex-end",marginTop:10 }}><button className="danger-button" onClick={()=>void deleteTrade(t)}>Delete entry</button></div></div>) : <div className="card empty" style={{ gridColumn:"1/-1" }}><Camera size={25}/><div>No trades journaled yet. Add your first setup, then attach the chart screenshots.</div><button className="primary-button" style={{marginTop:12}} onClick={()=>setShowTradeForm(true)}><Plus size={13}/> Journal first trade</button></div>}</div>
+      <div className="grid grid-2 panel">{recentTrades.length ? recentTrades.map(t=><div className="trade-card" key={t.id}><div className="trade-head"><div><div className="trade-symbol">{t.instrument}</div><div className="trade-details"><span>{t.direction.toUpperCase()}</span><span>·</span><span>{new Date(t.opened_at).toLocaleString()}</span></div></div><span className={"status "+(t.result==="win"?"green":t.result==="loss"?"red":t.result==="open"?"blue":"amber")}>{t.result}</span></div><div className="trade-details"><span>{t.setup || "No setup tagged"}</span>{t.risk_percent!==null&&<span>Risk {t.risk_percent}%</span>}{t.reward_risk!==null&&<span>R:R {t.reward_risk}</span>}</div><div style={{ font:"800 20px Manrope",color:Number(t.pnl_usd)>=0?"var(--green)":"var(--red)",margin:"6px 0" }}>{t.result==="open"?"Open":(Number(t.pnl_usd)>=0?"+":"")+money(t.pnl_usd)}</div>{t.notes&&<div className="trade-notes">{t.notes}</div>}<div style={{ display:"flex",justifyContent:"flex-end",marginTop:10 }}><button className="danger-button" onClick={()=>void deleteTrade(t)}>Delete entry</button></div></div>) : <div className="card empty" style={{ gridColumn:"1/-1" }}><Camera size={25}/><div>No trades journaled yet. Add your first setup, then attach the chart screenshots.</div><button className="primary-button" style={{marginTop:12}} onClick={()=>setShowTradeForm(true)}><Plus size={13}/> Journal first trade</button></div>}</div>
     </>;
   }
 
@@ -689,8 +626,8 @@ export default function Home() {
       {settingsTab==="Profile"&&<form className="card" onSubmit={saveSettings}><div className="card-title-row"><div><h3 className="card-title">Profile details</h3><div className="card-subtitle">Control the name and identity shown across your workspace.</div></div><span className="status green">Private account</span></div><div className="form-grid"><div className="field"><label>Display name</label><input value={profileDraft.full_name} onChange={e=>setProfileDraft({...profileDraft,full_name:e.target.value})} placeholder="Your name"/></div><div className="field"><label>Email address</label><input readOnly value={user?.email||""}/></div></div><div className="form-actions"><button className="primary-button" disabled={working}>Save profile</button></div></form>}
       {settingsTab==="Preferences"&&<form className="card" onSubmit={saveSettings}><div className="card-title-row"><div><h3 className="card-title">Workspace appearance</h3><div className="card-subtitle">Choose a comfortable theme and accent color.</div></div></div><div className="field" style={{marginBottom:18}}><label>Theme</label><div className="segmented" style={{width:"fit-content"}}>{["dark","light"].map(x=><button type="button" key={x} className={profileDraft.theme===x?"active":""} onClick={()=>setProfileDraft({...profileDraft,theme:x as "dark"|"light"})}>{x==="dark"?"Dark":"Light"}</button>)}</div></div><div className="field"><label>Accent color</label><div className="color-options">{Object.entries({gold:"#f4c64e",violet:"#ac8bff",blue:"#68b7ff",mint:"#54d69b",rose:"#ff7582"}).map(([name,color])=><button type="button" title={name} key={name} className={"color-swatch "+(profileDraft.accent===name?"selected":"")} style={{background:color}} onClick={()=>setProfileDraft({...profileDraft,accent:name})}/>)}</div></div><div className="field" style={{marginTop:18}}><label>Timezone</label><select value={profileDraft.timezone} onChange={e=>setProfileDraft({...profileDraft,timezone:e.target.value})}><option value="Africa/Douala">Africa/Douala (Cameroon)</option><option value="UTC">UTC</option><option value="Europe/London">Europe/London</option><option value="America/New_York">America/New_York</option></select></div><div className="form-actions"><button className="primary-button" disabled={working}>Save preferences</button></div></form>}
       {settingsTab==="Finance"&&<form className="card" onSubmit={saveSettings}><div className="card-title-row"><div><h3 className="card-title">Financial defaults</h3><div className="card-subtitle">Exchange rates are manual estimates used to compare multi-currency records. Update them when needed.</div></div></div><div className="form-grid"><div className="field"><label>Display currency</label><select value={profileDraft.base_currency} onChange={e=>setProfileDraft({...profileDraft,base_currency:e.target.value as Currency})}><option value="XAF">FCFA (XAF)</option><option value="USD">US Dollar (USD)</option><option value="EUR">Euro (EUR)</option></select></div><div className="field"><label>Monthly net profit target (USD)</label><input type="number" min="1" value={profileDraft.monthly_profit_target_usd} onChange={e=>setProfileDraft({...profileDraft,monthly_profit_target_usd:e.target.value})}/></div><div className="field"><label>FCFA per 1 USD</label><input type="number" min="1" step="any" value={profileDraft.xaf_per_usd} onChange={e=>setProfileDraft({...profileDraft,xaf_per_usd:e.target.value})}/></div><div className="field"><label>USD per 1 EUR</label><input type="number" min=".01" step="any" value={profileDraft.eur_to_usd} onChange={e=>setProfileDraft({...profileDraft,eur_to_usd:e.target.value})}/></div></div><div className="auth-success" style={{marginTop:16}}>The exchange rate is stored on each new entry as a USD equivalent. Changing rates later does not rewrite old entries.</div><div className="form-actions"><button className="primary-button" disabled={working}>Save financial settings</button></div></form>}
-      {settingsTab==="Account"&&<div className="card"><div className="card-title-row"><div><h3 className="card-title">Account & security</h3><div className="card-subtitle">Your sign-in is handled by Supabase Auth. User data is isolated with row-level security.</div></div><ShieldCheck size={20} color="var(--green)"/></div><div className="task-row"><span className="muted">Access</span><b style={{marginLeft:"auto"}}>Automatic · single user</b></div><div className="task-row"><span className="muted">Workspace owner</span><b style={{marginLeft:"auto"}}>{profile?.full_name||"Name not set"}</b></div><div className="task-row"><span className="muted">Data isolation</span><span className="status green" style={{marginLeft:"auto"}}>RLS enabled</span></div></div>}
-      {settingsTab==="Data"&&<div className="card"><div className="card-title-row"><div><h3 className="card-title">Data portability</h3><div className="card-subtitle">Export your records to keep your own copy.</div></div><Download size={18} color="var(--gold)"/></div><p className="project-copy">Download a JSON archive of your profile, income, expenses, goals, tasks, projects and trade journal. Screenshot files remain in your private Supabase Storage bucket.</p><button className="primary-button" onClick={()=>void exportData()}><Download size={13}/> Export workspace data</button><div className="auth-success" style={{marginTop:17}}>No destructive reset action is exposed here. Deleting records or closing the account should be a deliberate action, not an accidental click.</div></div>}
+      {settingsTab==="Account"&&<div className="card"><div className="card-title-row"><div><h3 className="card-title">Account & security</h3><div className="card-subtitle">No account or sign-in. Your records are saved in this browser on this device.</div></div><ShieldCheck size={20} color="var(--green)"/></div><div className="task-row"><span className="muted">Access</span><b style={{marginLeft:"auto"}}>Automatic · single user</b></div><div className="task-row"><span className="muted">Workspace owner</span><b style={{marginLeft:"auto"}}>{profile?.full_name||"Name not set"}</b></div><div className="task-row"><span className="muted">Storage</span><span className="status green" style={{marginLeft:"auto"}}>This device only</span></div></div>}
+      {settingsTab==="Data"&&<div className="card"><div className="card-title-row"><div><h3 className="card-title">Data portability</h3><div className="card-subtitle">Export your records to keep your own copy.</div></div><Download size={18} color="var(--gold)"/></div><p className="project-copy">Download a JSON archive of your profile, income, expenses, goals, tasks, projects and trade journal. Your records are stored in this browser on this device.</p><button className="primary-button" onClick={()=>void exportData()}><Download size={13}/> Export workspace data</button><div className="auth-success" style={{marginTop:17}}>No destructive reset action is exposed here. Deleting records or closing the account should be a deliberate action, not an accidental click.</div></div>}
     </>;
   }
 
@@ -715,7 +652,7 @@ export default function Home() {
       {["Workspace","Money","Focus areas","Account"].map(group=><div key={group}><div className="nav-label">{group}</div><div className="nav-list">{nav.filter(x=>x.group===group).map(item=>{const Icon=item.icon;return <button key={item.id} className={"nav-item "+(screen===item.id?"active":"")} onClick={()=>{setScreen(item.id);setMobileOpen(false);}}><Icon size={16}/>{item.label}</button>;})}</div></div>)}
       <div className="sidebar-bottom"><div className="sidebar-goal"><small>NET PROFIT TARGET</small><strong>{money(netProfit)} <span style={{fontSize:10,color:"var(--muted)",fontWeight:600}}> / {money(target)}</span></strong><div className="progress"><span style={{width:targetPct+"%"}}/></div><small style={{display:"block",marginTop:8}}>{targetPct.toFixed(1)}% completed</small></div><div className="sidebar-user"><div className="avatar">{initials(profile.full_name||user.email||"C")}</div><div style={{minWidth:0,flex:1}}><div className="user-name">{profile.full_name||"Your workspace"}</div><div className="user-email">{user?.email||""}</div></div><button className="icon-button" style={{width:29,height:29}} onClick={()=>setScreen("settings")}><Settings2 size={13}/></button></div></div>
     </aside>
-    <main className="main"><Header/>{dataError&&<div className="auth-error" style={{marginBottom:16}}>Database issue: {dataError}. Check that the supplied migration has been applied and that the Auth user has the correct permissions.</div>}{content()}</main>
+    <main className="main"><Header/>{dataError&&<div className="auth-error" style={{marginBottom:16}}>Local storage issue: {dataError}.</div>}{content()}</main>
     {toast&&<div style={{position:"fixed",right:18,bottom:18,zIndex:60,background:toast.kind==="error"?"#3a1d27":"#173328",border:"1px solid "+(toast.kind==="error"?"rgba(255,117,130,.35)":"rgba(84,214,155,.3)"),borderRadius:12,padding:"12px 15px",boxShadow:"var(--shadow)",fontSize:11,color:"#eff4f8",maxWidth:320}}>{toast.kind==="error"?"Something went wrong: ":""}{toast.text}</div>}
     {working&&<div style={{position:"fixed",top:0,left:0,right:0,height:2,zIndex:70,background:"linear-gradient(90deg,transparent,var(--gold),transparent)",animation:"loadingbar 1.1s linear infinite"}}/>}
   </div>;
