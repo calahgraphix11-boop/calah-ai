@@ -85,6 +85,10 @@ export default function Home() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [trades, setTrades] = useState<Trade[]>([]);
   const [booting, setBooting] = useState(true);
+  const [unlocked, setUnlocked] = useState(false);
+  const [accessPin, setAccessPin] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
   const [working, setWorking] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [authName, setAuthName] = useState("");
@@ -185,6 +189,7 @@ export default function Home() {
   }
 
   useEffect(() => {
+    if (!unlocked) return;
     if (!supabase) { setBooting(false); return; }
     let alive = true;
     const startPrivateWorkspace = async () => {
@@ -207,7 +212,19 @@ export default function Home() {
     };
     void startPrivateWorkspace();
     return () => { alive = false; };
-  }, []);
+  }, [unlocked]);
+
+  async function unlockWorkspace(e: FormEvent) {
+    e.preventDefault();
+    if (accessPin.length !== 4 || unlocking) return;
+    setUnlocking(true); setPinError("");
+    try {
+      const response = await fetch("/api/unlock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: accessPin }) });
+      if (!response.ok) throw new Error(response.status === 429 ? "Too many attempts. Wait a little and try again." : "Incorrect PIN. Try again.");
+      setUnlocked(true); setAccessPin("");
+    } catch (error) { setPinError(error instanceof Error ? error.message : "Could not unlock the workspace."); }
+    finally { setUnlocking(false); }
+  }
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -435,6 +452,21 @@ export default function Home() {
     analytics: ["Performance analytics", "See what is working, where money comes from and how the month is moving."],
     settings: ["Workspace settings", "Make the command centre fit your workflow."]
   };
+
+  if (!unlocked) return (
+    <div className="auth-shell">
+      <form className="auth-card" onSubmit={unlockWorkspace}>
+        <div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div>
+        <div style={{width:46,height:46,borderRadius:14,display:"grid",placeItems:"center",background:"rgba(244,198,78,.12)",border:"1px solid rgba(244,198,78,.2)",marginBottom:20}}><Lock size={20} color="var(--gold)"/></div>
+        <h1>Welcome back.</h1>
+        <p>Enter your 4-digit PIN to open your private workspace.</p>
+        <div className="field" style={{marginTop:22}}><label htmlFor="workspace-pin">Access PIN</label><input id="workspace-pin" type="password" inputMode="numeric" autoComplete="current-password" maxLength={4} pattern="[0-9]{4}" value={accessPin} onChange={e=>setAccessPin(e.target.value.replace(/\\D/g,"").slice(0,4))} placeholder="••••" autoFocus required /></div>
+        {pinError&&<div className="auth-error" style={{marginTop:12}}>{pinError}</div>}
+        <button className="primary-button" type="submit" disabled={unlocking||accessPin.length!==4} style={{width:"100%",justifyContent:"center",marginTop:16}}>{unlocking?"Checking…":"Unlock workspace"}</button>
+        <div className="tiny muted" style={{marginTop:18}}>Private access · Your records stay in Supabase</div>
+      </form>
+    </div>
+  );
 
   if (booting) return <div className="auth-shell"><div className="auth-card"><div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div><p>Loading your private workspace…</p></div></div>;
 
