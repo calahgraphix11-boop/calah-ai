@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+
 const COOKIE_NAME = "ncc_access";
 
 async function signature(value: string, secret: string) {
@@ -19,9 +21,9 @@ export async function middleware(request: Request) {
   if (secret && token) {
     const [expires, supplied] = token.split(".");
     const validExpiry = /^\d+$/.test(expires || "") && Number(expires) > Math.floor(Date.now() / 1000);
-    if (validExpiry && supplied && safeEqual(supplied, await signature(expires, secret))) return Response.next();
+    if (validExpiry && supplied && safeEqual(supplied, await signature(expires, secret))) return NextResponse.next();
   }
-  return Response.redirect(new URL("/?locked=1", request.url));
+  return NextResponse.redirect(new URL("/?locked=1", request.url));
 }
 
 export const config = {
