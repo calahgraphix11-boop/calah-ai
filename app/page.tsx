@@ -187,23 +187,26 @@ export default function Home() {
   useEffect(() => {
     if (!supabase) { setBooting(false); return; }
     let alive = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (!alive) return;
-      if (data.session?.user) {
-        setUser({ id: data.session.user.id, email: data.session.user.email });
-        void loadWorkspace(data.session.user.id).finally(() => setBooting(false));
-      } else setBooting(false);
-    });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!alive) return;
-      if (session?.user) {
-        setUser({ id: session.user.id, email: session.user.email });
-        void loadWorkspace(session.user.id);
-      } else {
-        setUser(null); setProfile(null); setIncomes([]); setExpenses([]); setGoals([]); setTasks([]); setProjects([]); setTrades([]);
+    const startPrivateWorkspace = async () => {
+      try {
+        const { data: sessionData } = await supabase!.auth.getSession();
+        let activeUser = sessionData.session?.user ?? null;
+        if (!activeUser) {
+          const { data, error } = await supabase!.auth.signInAnonymously();
+          if (error) throw error;
+          activeUser = data.user;
+        }
+        if (!alive || !activeUser) return;
+        setUser({ id: activeUser.id, email: "Private single-user workspace" });
+        await loadWorkspace(activeUser.id);
+      } catch (error) {
+        if (alive) setDataError(error instanceof Error ? error.message : "Could not open your private workspace.");
+      } finally {
+        if (alive) setBooting(false);
       }
-    });
-    return () => { alive = false; listener.subscription.unsubscribe(); };
+    };
+    void startPrivateWorkspace();
+    return () => { alive = false; };
   }, []);
 
   useEffect(() => {
@@ -255,24 +258,6 @@ export default function Home() {
     return money(value * (profile?.xaf_per_usd || 600), "XAF");
   };
 
-  async function handleAuth(e: FormEvent) {
-    e.preventDefault(); setAuthError(""); setAuthNotice("");
-    if (!supabase) return;
-    setWorking(true);
-    try {
-      if (authMode === "signup") {
-        const { data, error } = await supabase.auth.signUp({ email: authEmail, password: authPassword, options: { data: { full_name: authName }, emailRedirectTo: "https://november-command-centre.vercel.app" } });
-        if (error) throw error;
-        if (data.session) setAuthNotice("Account created. Your private workspace is being prepared.");
-        else setAuthNotice("Account created. Check your email to confirm the address, then sign in.");
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
-        if (error) throw error;
-      }
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Authentication failed.");
-    } finally { setWorking(false); }
-  }
 
   async function addIncome(e: FormEvent) {
     e.preventDefault(); if (!supabase || !user || !incomeDraft.title.trim() || !incomeDraft.amount) return;
@@ -467,28 +452,7 @@ export default function Home() {
     </div>
   );
 
-  if (!user || !profile) return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div>
-        <h1>{authMode === "signin" ? "Welcome back." : "Create your workspace."}</h1>
-        <p>{authMode === "signin" ? "Sign in to pick up where you left off. Your goals, income and journal are private to your account." : "Create a private account. Your workspace and records will be separated from every other user."}</p>
-        {authError && <div className="auth-error">{authError}</div>}
-        {authNotice && <div className="auth-success">{authNotice}</div>}
-        <form onSubmit={handleAuth}>
-          {authMode === "signup" && <div className="field" style={{ marginBottom: 12 }}><label>Your name</label><input required value={authName} onChange={e => setAuthName(e.target.value)} placeholder="Name for your dashboard" /></div>}
-          <div className="field" style={{ marginBottom: 12 }}><label>Email address</label><input required type="email" autoComplete="email" value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="you@example.com" /></div>
-          <div className="field"><label>Password</label><input required type="password" minLength={6} autoComplete={authMode === "signup" ? "new-password" : "current-password"} value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="At least 6 characters" /></div>
-          <button className="primary-button" disabled={working} style={{ width: "100%", justifyContent: "center", marginTop: 17 }}>{working ? "Please wait…" : authMode === "signin" ? "Sign in" : "Create account"}</button>
-        </form>
-        <div style={{ textAlign: "center", marginTop: 17, color: "var(--muted)", fontSize: 10 }}>
-          {authMode === "signin" ? "New here?" : "Already have an account?"}{" "}
-          <button className="link-button" onClick={() => { setAuthMode(authMode === "signin" ? "signup" : "signin"); setAuthError(""); setAuthNotice(""); }}>{authMode === "signin" ? "Create account" : "Sign in instead"}</button>
-        </div>
-        <div className="tiny muted" style={{ marginTop: 18, display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}><Lock size={12} /> Private workspace protected by Supabase Auth and row-level security</div>
-      </div>
-    </div>
-  );
+  if (!user || !profile) return <div className="auth-shell"><div className="auth-card"><div className="brand"><div className="brand-mark">N</div><div><div className="brand-name">NOVEMBER</div><div className="brand-sub">Command Centre</div></div></div><p>Preparing your private workspace…</p>{dataError && <div className="auth-error">{dataError}</div>}</div></div>;
 
   function Header() {
     const [title, description] = pageTitle[screen];
@@ -693,7 +657,7 @@ export default function Home() {
       {settingsTab==="Profile"&&<form className="card" onSubmit={saveSettings}><div className="card-title-row"><div><h3 className="card-title">Profile details</h3><div className="card-subtitle">Control the name and identity shown across your workspace.</div></div><span className="status green">Private account</span></div><div className="form-grid"><div className="field"><label>Display name</label><input value={profileDraft.full_name} onChange={e=>setProfileDraft({...profileDraft,full_name:e.target.value})} placeholder="Your name"/></div><div className="field"><label>Email address</label><input readOnly value={user?.email||""}/></div></div><div className="form-actions"><button className="primary-button" disabled={working}>Save profile</button></div></form>}
       {settingsTab==="Preferences"&&<form className="card" onSubmit={saveSettings}><div className="card-title-row"><div><h3 className="card-title">Workspace appearance</h3><div className="card-subtitle">Choose a comfortable theme and accent color.</div></div></div><div className="field" style={{marginBottom:18}}><label>Theme</label><div className="segmented" style={{width:"fit-content"}}>{["dark","light"].map(x=><button type="button" key={x} className={profileDraft.theme===x?"active":""} onClick={()=>setProfileDraft({...profileDraft,theme:x as "dark"|"light"})}>{x==="dark"?"Dark":"Light"}</button>)}</div></div><div className="field"><label>Accent color</label><div className="color-options">{Object.entries({gold:"#f4c64e",violet:"#ac8bff",blue:"#68b7ff",mint:"#54d69b",rose:"#ff7582"}).map(([name,color])=><button type="button" title={name} key={name} className={"color-swatch "+(profileDraft.accent===name?"selected":"")} style={{background:color}} onClick={()=>setProfileDraft({...profileDraft,accent:name})}/>)}</div></div><div className="field" style={{marginTop:18}}><label>Timezone</label><select value={profileDraft.timezone} onChange={e=>setProfileDraft({...profileDraft,timezone:e.target.value})}><option value="Africa/Douala">Africa/Douala (Cameroon)</option><option value="UTC">UTC</option><option value="Europe/London">Europe/London</option><option value="America/New_York">America/New_York</option></select></div><div className="form-actions"><button className="primary-button" disabled={working}>Save preferences</button></div></form>}
       {settingsTab==="Finance"&&<form className="card" onSubmit={saveSettings}><div className="card-title-row"><div><h3 className="card-title">Financial defaults</h3><div className="card-subtitle">Exchange rates are manual estimates used to compare multi-currency records. Update them when needed.</div></div></div><div className="form-grid"><div className="field"><label>Display currency</label><select value={profileDraft.base_currency} onChange={e=>setProfileDraft({...profileDraft,base_currency:e.target.value as Currency})}><option value="XAF">FCFA (XAF)</option><option value="USD">US Dollar (USD)</option><option value="EUR">Euro (EUR)</option></select></div><div className="field"><label>Monthly net profit target (USD)</label><input type="number" min="1" value={profileDraft.monthly_profit_target_usd} onChange={e=>setProfileDraft({...profileDraft,monthly_profit_target_usd:e.target.value})}/></div><div className="field"><label>FCFA per 1 USD</label><input type="number" min="1" step="any" value={profileDraft.xaf_per_usd} onChange={e=>setProfileDraft({...profileDraft,xaf_per_usd:e.target.value})}/></div><div className="field"><label>USD per 1 EUR</label><input type="number" min=".01" step="any" value={profileDraft.eur_to_usd} onChange={e=>setProfileDraft({...profileDraft,eur_to_usd:e.target.value})}/></div></div><div className="auth-success" style={{marginTop:16}}>The exchange rate is stored on each new entry as a USD equivalent. Changing rates later does not rewrite old entries.</div><div className="form-actions"><button className="primary-button" disabled={working}>Save financial settings</button></div></form>}
-      {settingsTab==="Account"&&<div className="card"><div className="card-title-row"><div><h3 className="card-title">Account & security</h3><div className="card-subtitle">Your sign-in is handled by Supabase Auth. User data is isolated with row-level security.</div></div><ShieldCheck size={20} color="var(--green)"/></div><div className="task-row"><span className="muted">Signed in as</span><b style={{marginLeft:"auto"}}>{user?.email||""}</b></div><div className="task-row"><span className="muted">Workspace owner</span><b style={{marginLeft:"auto"}}>{profile?.full_name||"Name not set"}</b></div><div className="task-row"><span className="muted">Data isolation</span><span className="status green" style={{marginLeft:"auto"}}>RLS enabled</span></div><button className="danger-button" style={{marginTop:18}} onClick={()=>void signOut()}><LogOut size={13} style={{display:"inline",verticalAlign:"middle",marginRight:6}}/> Sign out</button></div>}
+      {settingsTab==="Account"&&<div className="card"><div className="card-title-row"><div><h3 className="card-title">Account & security</h3><div className="card-subtitle">Your sign-in is handled by Supabase Auth. User data is isolated with row-level security.</div></div><ShieldCheck size={20} color="var(--green)"/></div><div className="task-row"><span className="muted">Access</span><b style={{marginLeft:"auto"}}>Automatic · single user</b></div><div className="task-row"><span className="muted">Workspace owner</span><b style={{marginLeft:"auto"}}>{profile?.full_name||"Name not set"}</b></div><div className="task-row"><span className="muted">Data isolation</span><span className="status green" style={{marginLeft:"auto"}}>RLS enabled</span></div></div>}
       {settingsTab==="Data"&&<div className="card"><div className="card-title-row"><div><h3 className="card-title">Data portability</h3><div className="card-subtitle">Export your records to keep your own copy.</div></div><Download size={18} color="var(--gold)"/></div><p className="project-copy">Download a JSON archive of your profile, income, expenses, goals, tasks, projects and trade journal. Screenshot files remain in your private Supabase Storage bucket.</p><button className="primary-button" onClick={()=>void exportData()}><Download size={13}/> Export workspace data</button><div className="auth-success" style={{marginTop:17}}>No destructive reset action is exposed here. Deleting records or closing the account should be a deliberate action, not an accidental click.</div></div>}
     </>;
   }
