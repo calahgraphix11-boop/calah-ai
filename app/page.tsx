@@ -182,8 +182,7 @@ export default function Home() {
     let alive = true;
     const startWorkspace = async () => {
       try {
-        const { data } = await supabase!.auth.getSession();
-        const activeUser = data.session.user;
+        const activeUser = { id: "local-device-user" };
         if (!alive) return;
         setUser({ id: activeUser.id, email: "Saved on this device" });
         await loadWorkspace(activeUser.id);
